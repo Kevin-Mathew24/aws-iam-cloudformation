@@ -1,0 +1,150 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for creating IAM roles for Lambda and S3 following AWS best practices'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name of the project
+    Default: myproject
+  Environment:
+    Type: String
+    Description: Environment (e.g., dev, test, prod)
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+Resources:
+  # S3 Access Role
+  S3AccessRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-s3-access-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref 'AWS::AccountId'
+      ManagedPolicyArns:
+        - !Ref S3AccessPolicy
+      Path: /service-roles/
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-lambda-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Ref LambdaBasicExecutionPolicy
+        - !Ref LambdaS3AccessPolicy
+      Path: /service-roles/
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # S3 Access Policy
+  S3AccessPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Sub '${ProjectName}-${Environment}-s3-access-policy'
+      Description: Policy for S3 access with least privilege
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:ListBucket'
+            Resource:
+              - !Sub 'arn:aws:s3:::${ProjectName}-${Environment}-*'
+              - !Sub 'arn:aws:s3:::${ProjectName}-${Environment}-*/*'
+          - Effect: Allow
+            Action:
+              - 's3:ListAllMyBuckets'
+            Resource: '*'
+
+  # Lambda Basic Execution Policy
+  LambdaBasicExecutionPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Sub '${ProjectName}-${Environment}-lambda-basic-execution-policy'
+      Description: Policy for basic Lambda execution permissions
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-${Environment}-*:*'
+
+  # Lambda S3 Access Policy
+  LambdaS3AccessPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Sub '${ProjectName}-${Environment}-lambda-s3-access-policy'
+      Description: Policy for Lambda to access S3 with least privilege
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:ListBucket'
+            Resource:
+              - !Sub 'arn:aws:s3:::${ProjectName}-${Environment}-*'
+              - !Sub 'arn:aws:s3:::${ProjectName}-${Environment}-*/*'
+
+Outputs:
+  S3AccessRoleArn:
+    Description: ARN of the S3 Access Role
+    Value: !GetAtt S3AccessRole.Arn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-S3AccessRoleArn'
+
+  LambdaExecutionRoleArn:
+    Description: ARN of the Lambda Execution Role
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-LambdaExecutionRoleArn'
+
+  S3AccessPolicyArn:
+    Description: ARN of the S3 Access Policy
+    Value: !Ref S3AccessPolicy
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-S3AccessPolicyArn'
+
+  LambdaBasicExecutionPolicyArn:
+    Description: ARN of the Lambda Basic Execution Policy
+    Value: !Ref LambdaBasicExecutionPolicy
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-LambdaBasicExecutionPolicyArn'
+
+  LambdaS3AccessPolicyArn:
+    Description: ARN of the Lambda S3 Access Policy
+    Value: !Ref LambdaS3AccessPolicy
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-LambdaS3AccessPolicyArn'
